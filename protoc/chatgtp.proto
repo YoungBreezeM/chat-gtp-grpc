@@ -1,0 +1,29 @@
+
+syntax = "proto3";
+
+package api;
+
+option go_package = "./pb";
+
+// The service definition.
+service ChatGTPService{
+  // Sends a greeting
+  rpc Chat (ChatRequest) returns (stream ChatReply) {}
+}
+
+// The request message
+message ChatRequest {
+  message message {
+    string role = 1;
+    string content =2;
+  }
+  string chat_id = 1;
+  string model = 2;
+  string token = 3;
+  repeated message messages =4;
+}
+
+// The response message
+message ChatReply {
+  string message = 1;
+}
