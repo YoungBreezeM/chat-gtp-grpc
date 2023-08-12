@@ -1,5 +1,6 @@
 package chatgtp
 
 const (
-	CHATTING = "chatting"
+	IDLE = 0
+	BUSY = 1
 )

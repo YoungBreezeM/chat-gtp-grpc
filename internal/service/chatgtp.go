@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type ChatGTP struct {
+type Chat struct {
+	Status uint8
+	*ChatGPTRequest
 }
 
 type ChatGPTRequest struct {
@@ -53,15 +55,11 @@ func NewChatGPTRequest() ChatGPTRequest {
 	}
 }
 
-func (c *ChatGPTRequest) Send(req *pb.ChatRequest, ch chan string) {
-
-	for _, m := range req.Messages {
-		c.Messages = append(c.Messages, ChatGTPMessage{
-			ID:      uuid.New(),
-			Author:  ChatGTPAuthor{Role: m.Role},
-			Content: ChatGTPContent{ContentType: "text", Parts: []string{m.Content}},
-		})
-	}
+func (c *Chat) Send(token string, res pb.ChatGTPService_ChatServer) {
+	c.Status = chatgtp.BUSY
+	defer func() {
+		c.Status = chatgtp.IDLE
+	}()
 
 	client, err := tlsc.NewTLSClient()
 	if err != nil {
@@ -78,7 +76,7 @@ func (c *ChatGPTRequest) Send(req *pb.ChatRequest, ch chan string) {
 		}
 	}
 
-	body, err := json.Marshal(c)
+	body, err := json.Marshal(c.ChatGPTRequest)
 	if err != nil {
 		log.Println(err)
 		return
@@ -91,7 +89,7 @@ func (c *ChatGPTRequest) Send(req *pb.ChatRequest, ch chan string) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36")
 	request.Header.Set("Accept", "*/*")
-	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", req.Token))
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	request.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
 
 	response, err := client.Do(request)
@@ -107,7 +105,9 @@ func (c *ChatGPTRequest) Send(req *pb.ChatRequest, ch chan string) {
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err == io.EOF {
-					ch <- io.EOF.Error()
+					if err = res.Send(&pb.ChatReply{Message: io.EOF.Error()}); err != nil {
+						log.Println(err)
+					}
 					break
 				}
 				log.Println("Failed to read response:", err)
@@ -115,43 +115,52 @@ func (c *ChatGPTRequest) Send(req *pb.ChatRequest, ch chan string) {
 			}
 			//
 			if len(line) > 1 {
-				ch <- line
+				if err = res.Send(&pb.ChatReply{Message: line}); err != nil {
+					log.Println(err)
+				}
 			}
 		}
 
 	} else {
 		log.Println(response.Status)
+		if err = res.Send(&pb.ChatReply{Message: response.Status}); err != nil {
+			log.Println(err)
+		}
 	}
 
 }
 
-var chatting = false
-
-func (s *ChatGTP) Chat(req *pb.ChatRequest, res pb.ChatGTPService_ChatServer) (err error) {
+func (s *Chat) Chat(req *pb.ChatRequest, res pb.ChatGTPService_ChatServer) (err error) {
 	log.Printf("Received: %s", req.ChatId)
 
-	if chatting {
-		if err = res.Send(&pb.ChatReply{Message: chatgtp.CHATTING}); err != nil {
+	if s.Status == chatgtp.BUSY {
+		if err = res.Send(&pb.ChatReply{Message: "service is busy now"}); err != nil {
 			log.Println(err)
 		}
 		return
 	}
 
-	c := make(chan string)
 	cg := NewChatGPTRequest()
 
-	chatting = true
-	go cg.Send(req, c)
-
-	for {
-		msg := <-c
-		if msg == "EOF" {
-			chatting = false
-			break
-		}
-		if err = res.Send(&pb.ChatReply{Message: msg}); err != nil {
-			log.Println(err)
-		}
+	if len(req.ConversationId) > 0 {
+		cg.ConversationID = req.ConversationId
 	}
+
+	if len(req.ParentMessageId) > 0 {
+		cg.ParentMessageID = req.ParentMessageId
+	}
+
+	for _, m := range req.Messages {
+		cg.Messages = append(cg.Messages, ChatGTPMessage{
+			ID:      uuid.New(),
+			Author:  ChatGTPAuthor{Role: m.Role},
+			Content: ChatGTPContent{ContentType: "text", Parts: []string{m.Content}},
+		})
+	}
+
+	s.ChatGPTRequest = &cg
+
+	s.Send(req.Token, res)
+
 	return nil
 }

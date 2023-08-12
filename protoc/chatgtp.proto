@@ -20,7 +20,9 @@ message ChatRequest {
   string chat_id = 1;
   string model = 2;
   string token = 3;
-  repeated message messages =4;
+  string parent_message_id = 4;
+  string conversation_id = 5;
+  repeated message messages = 6;
 }
 
 // The response message

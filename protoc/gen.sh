@@ -1,1 +1,1 @@
-protoc *.proto --go_out=plugins=grpc:../api
+protoc *.proto --go_out=../api --go-grpc_out=require_unimplemented_servers=false:../api

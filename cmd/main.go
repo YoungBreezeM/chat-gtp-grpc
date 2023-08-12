@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	port = ":50051"
+	port = ":8080"
 )
 
 func main() {

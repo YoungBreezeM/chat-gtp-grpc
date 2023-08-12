@@ -9,7 +9,7 @@ import (
 )
 
 func Wire(s *grpc.Server) {
-	pb.RegisterChatGTPServiceServer(s, &service.ChatGTP{})
+	pb.RegisterChatGTPServiceServer(s, &service.Chat{})
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
 }

@@ -1,23 +1,23 @@
 package main
 
 import (
+	"cgg/api/pb"
+	"context"
 	"log"
-	"sync"
-	"testing"
-
-	pb "cgg/api/pb"
+	"os"
 
 	"github.com/google/uuid"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	address = "localhost:50051"
-)
+func main() {
+	address := os.Getenv("ADDR")
+	if len(address) <= 0 {
+		log.Println("Please set a server addr")
+		return
+	}
 
-func Chat() {
 	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -49,19 +49,4 @@ func Chat() {
 		}
 		log.Println("resp:", data.Message)
 	}
-}
-func TestChat(t *testing.T) {
-	Chat()
-}
-
-func TestMultipleClient(t *testing.T) {
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	for i := 0; i < 2; i++ {
-		go func() {
-			Chat()
-			wg.Done()
-		}()
-	}
-	wg.Wait()
 }
